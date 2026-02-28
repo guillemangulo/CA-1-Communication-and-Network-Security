@@ -1,0 +1,63 @@
+<group name="custom_threat_hunting,">
+
+  <rule id="100201" level="12">
+    <if_group>windows</if_group>
+    <match>localgroup administrators</match>
+    <description>Custom Detection - Account discovery: Local administrators group enumeration (MITRE T1087.002)</description>
+    <mitre>
+      <id>T1087.002</id>
+    </mitre>
+    <info type="text">Detection of native Windows commands used to map high-privileged local accounts.</info>
+  </rule>
+
+  <rule id="100202" level="15">
+    <if_sid>92026</if_sid> 
+    <match>reg</match>
+    <description>Custom Detection - Credential access: SAM registry hive dumped to disk (MITRE T1003.002)</description>
+    <mitre>
+      <id>T1003.002</id>
+    </mitre>
+    <info type="link">https://attack.mitre.org/techniques/T1003/002/</info>
+  </rule>
+
+  <rule id="100203" level="15">
+    <if_sid>60000, 92057</if_sid>
+    <match>-ExecutionPolicy Bypass|-EncodedCommand</match>
+    <description>Custom Detection - Defense evasion: Obfuscated PowerShell execution (MITRE T1059.001)</description>
+    <mitre>
+      <id>T1059.001</id>
+    </mitre>
+    <info type="text">Detection of PowerShell execution policy bypass combined with Base64 encoding to conceal script intent.</info>
+  </rule>
+
+  <rule id="100204" level="14">
+    <if_sid>5402, 100005, 80700</if_sid>
+    <match>etc/sudoers</match>
+    <description>Custom Detection - Abuse elevation control: Unauthorized modification of /etc/sudoers (MITRE T1548.003)</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <info type="link">https://attack.mitre.org/techniques/T1548/003/</info>
+  </rule>
+
+  <rule id="100205" level="14">
+    <if_sid>5402, 100005, 80700</if_sid>
+    <match>etc/crontab</match>
+    <description>Custom Detection - Persistence: Malicious cron job injected into /etc/crontab (MITRE T1053.003)</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+    <info type="text">Monitoring for unauthorized additions to system-wide crontabs used for persistent access.</info>
+  </rule>
+
+  <rule id="100206" level="14">
+    <if_sid>5402, 100005, 80700</if_sid>
+    <match>chmod +s|cp /bin/bash</match>
+    <description>Custom Detection - Privilege escalation: SUID/Backdoor activity (MITRE T1548.001)</description>
+    <mitre>
+      <id>T1548.001</id>
+    </mitre>
+    <info type="link">https://attack.mitre.org/techniques/T1548/001/</info>
+  </rule>
+
+</group>

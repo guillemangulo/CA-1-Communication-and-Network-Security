@@ -1,0 +1,8 @@
+<Sysmon schemaversion="4.50">
+  <EventFiltering>
+    <RuleGroup name="" groupRelation="or">
+      <ProcessCreate onmatch="exclude"/>
+      <NetworkConnect onmatch="exclude"/>
+    </RuleGroup>
+  </EventFiltering>
+</Sysmon>
