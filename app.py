@@ -8,7 +8,6 @@ from flask import Flask, request, jsonify
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
-
 OLLAMA_BASE = os.environ.get('OLLAMA_HOST', 'http://ollama:11434')
 OLLAMA_URL = f"{OLLAMA_BASE.rstrip('/')}/api/generate"
 WAZUH_API = os.environ.get('WAZUH_MANAGER', 'https://wazuh.manager:55000')
@@ -27,9 +26,9 @@ ACTION_MAP = {
     }
 }
 
-# --- MEMORIA CACHÉ PARA DEDUPLICACIÓN (ANTI-SPAM) ---
+# --- CACHE MEMORY FOR DEDUPLICATION (ANTI-SPAM) ---
 RECENT_ALERTS = {}
-DEDUPLICATION_WINDOW = 30 # Segundos de "enfriamiento"
+DEDUPLICATION_WINDOW = 30 # Cooldown window in seconds
 
 def get_wazuh_token():
     auth_url = f"{WAZUH_API}/security/user/authenticate"
@@ -46,18 +45,17 @@ def handle_alert():
     rule_id = all_fields.get('rule', {}).get('id', 'Unknown')
     description = all_fields.get('rule', {}).get('description', 'No description')
     
-    # --- MOTOR DE DEDUPLICACIÓN ---
+  
     current_time = time.time()
     alert_signature = f"{agent_id}_{rule_id}"
     
     if alert_signature in RECENT_ALERTS:
         time_elapsed = current_time - RECENT_ALERTS[alert_signature]
         if time_elapsed < DEDUPLICATION_WINDOW:
-            print(f"DEBUG: Duplicate ignored. Rule {rule_id} from Agent {agent_id} triggered {time_elapsed:.1f}s ago.", flush=True)
             return jsonify({"status": "ignored", "reason": "deduplicated"}), 200
             
     RECENT_ALERTS[alert_signature] = current_time
-    # ------------------------------
+
     
     agent_data = all_fields.get('agent', {})
     decoder_data = all_fields.get('decoder', {})
@@ -66,22 +64,22 @@ def handle_alert():
     
     print(f"\n--- ALERT RECEIVED: {description} (Agent: {agent_id}, OS: {os_type}) ---", flush=True)
 
-    prompt = f"""[INST] Eres un clasificador estricto de seguridad. Tu única función es devolver UNA palabra exacta. Cero explicaciones.
+    prompt = f"""[INST] You are a strict security classifier. Your only function is to return ONE exact word. Zero explanations.
     
-    REGLAS LINUX:
-    1. Si la alerta contiene 'sudoers', 'malicious_user' o 'T1548.003': devuelve LOCK_USER
-    2. Si la alerta contiene 'cron', 'crontab', 'hidden_bash' o 'SUID': devuelve REMEDIATE
+    LINUX RULES:
+    1. If the alert contains 'sudoers', 'malicious_user' or 'T1548.003': return LOCK_USER
+    2. If the alert contains 'cron', 'crontab', 'hidden_bash' or 'SUID': return REMEDIATE
     
-    REGLAS WINDOWS:
-    3. Si la alerta contiene 'T1087.002' o 'Local administrators group': devuelve WIN_LOCK
-    4. Si la alerta contiene 'T1003.002' o 'SAM registry hive': devuelve WIN_DELETE
-    5. Si la alerta contiene 'T1059.001' o 'Obfuscated PowerShell': devuelve WIN_KILL
+    WINDOWS RULES:
+    3. If the alert contains 'T1087.002' or 'Local administrators group': return WIN_LOCK
+    4. If the alert contains 'T1003.002' or 'SAM registry hive': return WIN_DELETE
+    5. If the alert contains 'T1059.001' or 'Obfuscated PowerShell': return WIN_KILL
     
-    Si no coincide con ninguna: devuelve IGNORE
+    If it does not match any rule: return IGNORE
     
-    Alerta: '{description}'
+    Alert: '{description}'
     
-    Respuesta: [/INST]"""
+    Response: [/INST]"""
         
     try:
         payload = {
@@ -91,21 +89,19 @@ def handle_alert():
             "options": {"temperature": 0.0}
         }
         response = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        
         raw_ai_output = response.json().get('response', 'IGNORE').upper().strip()
         
-        print(f"DEBUG: Raw AI Output: '{raw_ai_output}'", flush=True)
-
         tag = "IGNORE"
-        if "LOCK_USER" in raw_ai_output:
-            tag = "LOCK_USER"
-        elif "REMEDIATE" in raw_ai_output:
-            tag = "REMEDIATE"
-        elif "WIN_LOCK" in raw_ai_output:
-            tag = "WIN_LOCK"
-        elif "WIN_DELETE" in raw_ai_output:
-            tag = "WIN_DELETE"
-        elif "WIN_KILL" in raw_ai_output:
-            tag = "WIN_KILL"
+        valid_tags = ["LOCK_USER", "REMEDIATE", "WIN_LOCK", "WIN_DELETE", "WIN_KILL"]
+        
+        # Smart logic: extract the LAST tag mentioned in the text to avoid hallucination errors
+        last_index = -1
+        for t in valid_tags:
+            idx = raw_ai_output.rfind(t)
+            if idx > last_index:
+                last_index = idx
+                tag = t
                 
         print(f"AI Decision: {tag}", flush=True)
     except Exception as e:
